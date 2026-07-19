@@ -25,6 +25,8 @@ TIMEZONE = ZoneInfo("Europe/Warsaw")
 
 PHOTO_PATH = "konkurs_tygodniowy.png"
 
+FORCE_SEND = os.getenv("FORCE_SEND", "false").lower() in ("1", "true", "yes", "tak")
+
 
 MESSAGE_TEXT = """⚡ KONKURS TYGODNIOWY
 
@@ -115,16 +117,31 @@ def send_text(chat_id: str) -> bool:
         return False
 
 
-def main() -> None:
+def should_send_today() -> bool:
     today = datetime.now(TIMEZONE).date()
     weekday = today.weekday()
 
+    print(f"Dzisiejsza data: {today.isoformat()}")
+    print(f"Dzień tygodnia numer: {weekday}")
+    print(f"FORCE_SEND={FORCE_SEND}")
+
+    if FORCE_SEND:
+        print("Tryb testowy FORCE_SEND=true. Wysyłam mimo daty i dnia tygodnia.")
+        return True
+
     if today < START_DATE:
         print(f"System konkursowy startuje od {START_DATE.isoformat()}. Dzisiaj brak wysyłki.")
-        return
+        return False
 
     if weekday != 0:
         print("Dzisiaj nie jest poniedziałek. Brak wysyłki konkursu.")
+        return False
+
+    return True
+
+
+def main() -> None:
+    if not should_send_today():
         return
 
     success_count = 0
