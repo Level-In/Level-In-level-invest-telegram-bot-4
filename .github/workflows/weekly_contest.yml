@@ -2,11 +2,6 @@ name: Weekly Contest Message
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: 'Wymuś wysyłkę testową'
-        required: false
-        default: 'false'
 
 jobs:
   send:
@@ -24,4 +19,3 @@ jobs:
       - run: python weekly_contest.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          FORCE_SEND: ${{ github.event.inputs.force }}
