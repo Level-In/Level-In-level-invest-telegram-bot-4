@@ -1,7 +1,5 @@
 import os
 import sys
-from datetime import datetime, date
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -20,9 +18,6 @@ CHAT_IDS = [
 ]
 
 
-START_DATE = date.fromisoformat("2026-07-20")
-TIMEZONE = ZoneInfo("Europe/Warsaw")
-
 PHOTO_CANDIDATES = [
     "konkurs_tygodniowy.png",
     "konkurs tygodniowy.png",
@@ -31,13 +26,6 @@ PHOTO_CANDIDATES = [
     "konkurs_tygodniowy.jpeg",
     "konkurs tygodniowy.jpeg",
 ]
-
-FORCE_SEND = os.getenv("FORCE_SEND", "false").strip().lower() in (
-    "1",
-    "true",
-    "yes",
-    "tak",
-)
 
 
 MESSAGE_TEXT = """⚡ KONKURS TYGODNIOWY
@@ -79,42 +67,19 @@ Każdy telefon może zakończyć się spotkaniem. Każde spotkanie może zakońc
 Wynik jest w Twoich rękach. Czas włączyć pełną moc i sięgnąć po dodatkowe pieniądze! 💪🔥💸"""
 
 
-def find_photo_path() -> str | None:
-    for file_name in PHOTO_CANDIDATES:
-        if os.path.exists(file_name):
-            print(f"Znaleziono zdjęcie: {file_name}")
-            return file_name
+def find_photo_path() -> str:
+    for photo_path in PHOTO_CANDIDATES:
+        if os.path.exists(photo_path):
+            print(f"Znaleziono grafikę: {photo_path}")
+            return photo_path
 
-    print("Nie znaleziono zdjęcia.")
+    print("Nie znaleziono grafiki konkursowej.")
     print("Pliki widoczne w repozytorium:")
+
     for file_name in os.listdir("."):
         print(file_name)
 
-    return None
-
-
-def should_send_today() -> bool:
-    today = datetime.now(TIMEZONE).date()
-    weekday = today.weekday()
-
-    print(f"Dzisiejsza data Europe Warsaw: {today.isoformat()}")
-    print(f"Dzień tygodnia numer: {weekday}")
-    print(f"FORCE_SEND={FORCE_SEND}")
-
-    if FORCE_SEND:
-        print("Tryb testowy FORCE_SEND=true. Wysyłam mimo daty i dnia tygodnia.")
-        return True
-
-    if today < START_DATE:
-        print(f"System konkursowy startuje od {START_DATE.isoformat()}. Dzisiaj brak wysyłki.")
-        return False
-
-    if weekday != 0:
-        print("Dzisiaj nie jest poniedziałek. Brak wysyłki konkursu.")
-        return False
-
-    print("Dzisiaj jest właściwy dzień. Wysyłam konkurs.")
-    return True
+    sys.exit(1)
 
 
 def send_photo(chat_id: str, photo_path: str) -> bool:
@@ -133,19 +98,23 @@ def send_photo(chat_id: str, photo_path: str) -> bool:
                 timeout=30,
             )
 
-        print(f"PHOTO CHAT_ID={chat_id} STATUS={response.status_code} RESPONSE={response.text}")
-        return response.ok
+        if response.ok:
+            print(f"Grafika wysłana do {chat_id}")
+            return True
 
-    except FileNotFoundError:
-        print(f"Nie znaleziono pliku zdjęcia: {photo_path}")
+        print(f"Błąd wysyłki grafiki do {chat_id}: {response.status_code} {response.text}")
         return False
 
     except requests.RequestException as error:
-        print(f"Błąd połączenia przy wysyłce zdjęcia do {chat_id}: {error}")
+        print(f"Błąd połączenia przy wysyłce grafiki do {chat_id}: {error}")
+        return False
+
+    except FileNotFoundError:
+        print(f"Nie znaleziono pliku grafiki: {photo_path}")
         return False
 
 
-def send_text(chat_id: str) -> bool:
+def send_text(chat_id: str, text: str) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
     try:
@@ -153,14 +122,18 @@ def send_text(chat_id: str) -> bool:
             url,
             json={
                 "chat_id": chat_id,
-                "text": MESSAGE_TEXT,
+                "text": text,
                 "disable_web_page_preview": True,
             },
             timeout=30,
         )
 
-        print(f"TEXT CHAT_ID={chat_id} STATUS={response.status_code} RESPONSE={response.text}")
-        return response.ok
+        if response.ok:
+            print(f"Tekst wysłany do {chat_id}")
+            return True
+
+        print(f"Błąd wysyłki tekstu do {chat_id}: {response.status_code} {response.text}")
+        return False
 
     except requests.RequestException as error:
         print(f"Błąd połączenia przy wysyłce tekstu do {chat_id}: {error}")
@@ -168,30 +141,17 @@ def send_text(chat_id: str) -> bool:
 
 
 def main() -> None:
-    if not should_send_today():
-        return
-
     photo_path = find_photo_path()
-
-    if not photo_path:
-        print("Brak zdjęcia. Nie wysyłam konkursu.")
-        sys.exit(1)
-
     success_count = 0
 
     for chat_id in CHAT_IDS:
         photo_ok = send_photo(chat_id, photo_path)
-
-        if not photo_ok:
-            print(f"Nie wysłano zdjęcia do {chat_id}. Pomijam tekst dla tej grupy.")
-            continue
-
-        text_ok = send_text(chat_id)
+        text_ok = send_text(chat_id, MESSAGE_TEXT)
 
         if photo_ok and text_ok:
             success_count += 1
 
-    print(f"Wysłano komplet zdjęcie plus tekst do {success_count}/{len(CHAT_IDS)} grup.")
+    print(f"Wysłano grafikę i tekst do {success_count}/{len(CHAT_IDS)} grup.")
 
     if success_count != len(CHAT_IDS):
         sys.exit(1)
