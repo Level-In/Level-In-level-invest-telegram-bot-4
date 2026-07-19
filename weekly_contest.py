@@ -23,9 +23,21 @@ CHAT_IDS = [
 START_DATE = date.fromisoformat("2026-07-20")
 TIMEZONE = ZoneInfo("Europe/Warsaw")
 
-PHOTO_PATH = "konkurs_tygodniowy.png"
+PHOTO_CANDIDATES = [
+    "konkurs_tygodniowy.png",
+    "konkurs tygodniowy.png",
+    "konkurs_tygodniowy.jpg",
+    "konkurs tygodniowy.jpg",
+    "konkurs_tygodniowy.jpeg",
+    "konkurs tygodniowy.jpeg",
+]
 
-FORCE_SEND = os.getenv("FORCE_SEND", "false").lower() in ("1", "true", "yes", "tak")
+FORCE_SEND = os.getenv("FORCE_SEND", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "tak",
+)
 
 
 MESSAGE_TEXT = """⚡ KONKURS TYGODNIOWY
@@ -67,11 +79,49 @@ Każdy telefon może zakończyć się spotkaniem. Każde spotkanie może zakońc
 Wynik jest w Twoich rękach. Czas włączyć pełną moc i sięgnąć po dodatkowe pieniądze! 💪🔥💸"""
 
 
-def send_photo(chat_id: str) -> bool:
+def find_photo_path() -> str | None:
+    for file_name in PHOTO_CANDIDATES:
+        if os.path.exists(file_name):
+            print(f"Znaleziono zdjęcie: {file_name}")
+            return file_name
+
+    print("Nie znaleziono zdjęcia.")
+    print("Pliki widoczne w repozytorium:")
+    for file_name in os.listdir("."):
+        print(file_name)
+
+    return None
+
+
+def should_send_today() -> bool:
+    today = datetime.now(TIMEZONE).date()
+    weekday = today.weekday()
+
+    print(f"Dzisiejsza data Europe Warsaw: {today.isoformat()}")
+    print(f"Dzień tygodnia numer: {weekday}")
+    print(f"FORCE_SEND={FORCE_SEND}")
+
+    if FORCE_SEND:
+        print("Tryb testowy FORCE_SEND=true. Wysyłam mimo daty i dnia tygodnia.")
+        return True
+
+    if today < START_DATE:
+        print(f"System konkursowy startuje od {START_DATE.isoformat()}. Dzisiaj brak wysyłki.")
+        return False
+
+    if weekday != 0:
+        print("Dzisiaj nie jest poniedziałek. Brak wysyłki konkursu.")
+        return False
+
+    print("Dzisiaj jest właściwy dzień. Wysyłam konkurs.")
+    return True
+
+
+def send_photo(chat_id: str, photo_path: str) -> bool:
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
 
     try:
-        with open(PHOTO_PATH, "rb") as photo:
+        with open(photo_path, "rb") as photo:
             response = requests.post(
                 url,
                 data={
@@ -87,7 +137,7 @@ def send_photo(chat_id: str) -> bool:
         return response.ok
 
     except FileNotFoundError:
-        print(f"Nie znaleziono pliku zdjęcia: {PHOTO_PATH}")
+        print(f"Nie znaleziono pliku zdjęcia: {photo_path}")
         return False
 
     except requests.RequestException as error:
@@ -117,37 +167,25 @@ def send_text(chat_id: str) -> bool:
         return False
 
 
-def should_send_today() -> bool:
-    today = datetime.now(TIMEZONE).date()
-    weekday = today.weekday()
-
-    print(f"Dzisiejsza data: {today.isoformat()}")
-    print(f"Dzień tygodnia numer: {weekday}")
-    print(f"FORCE_SEND={FORCE_SEND}")
-
-    if FORCE_SEND:
-        print("Tryb testowy FORCE_SEND=true. Wysyłam mimo daty i dnia tygodnia.")
-        return True
-
-    if today < START_DATE:
-        print(f"System konkursowy startuje od {START_DATE.isoformat()}. Dzisiaj brak wysyłki.")
-        return False
-
-    if weekday != 0:
-        print("Dzisiaj nie jest poniedziałek. Brak wysyłki konkursu.")
-        return False
-
-    return True
-
-
 def main() -> None:
     if not should_send_today():
         return
 
+    photo_path = find_photo_path()
+
+    if not photo_path:
+        print("Brak zdjęcia. Nie wysyłam konkursu.")
+        sys.exit(1)
+
     success_count = 0
 
     for chat_id in CHAT_IDS:
-        photo_ok = send_photo(chat_id)
+        photo_ok = send_photo(chat_id, photo_path)
+
+        if not photo_ok:
+            print(f"Nie wysłano zdjęcia do {chat_id}. Pomijam tekst dla tej grupy.")
+            continue
+
         text_ok = send_text(chat_id)
 
         if photo_ok and text_ok:
