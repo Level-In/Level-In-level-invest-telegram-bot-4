@@ -98,19 +98,22 @@ def send_photo(chat_id: str, photo_path: str) -> bool:
                 timeout=30,
             )
 
+        print(f"PHOTO CHAT_ID={chat_id} STATUS={response.status_code}")
+        print(f"PHOTO RESPONSE={response.text}")
+
         if response.ok:
             print(f"Grafika wysłana do {chat_id}")
             return True
 
-        print(f"Błąd wysyłki grafiki do {chat_id}: {response.status_code} {response.text}")
-        return False
-
-    except requests.RequestException as error:
-        print(f"Błąd połączenia przy wysyłce grafiki do {chat_id}: {error}")
+        print(f"Nie udało się wysłać grafiki do {chat_id}")
         return False
 
     except FileNotFoundError:
         print(f"Nie znaleziono pliku grafiki: {photo_path}")
+        return False
+
+    except requests.RequestException as error:
+        print(f"Błąd połączenia przy wysyłce grafiki do {chat_id}: {error}")
         return False
 
 
@@ -128,11 +131,14 @@ def send_text(chat_id: str, text: str) -> bool:
             timeout=30,
         )
 
+        print(f"TEXT CHAT_ID={chat_id} STATUS={response.status_code}")
+        print(f"TEXT RESPONSE={response.text}")
+
         if response.ok:
             print(f"Tekst wysłany do {chat_id}")
             return True
 
-        print(f"Błąd wysyłki tekstu do {chat_id}: {response.status_code} {response.text}")
+        print(f"Nie udało się wysłać tekstu do {chat_id}")
         return False
 
     except requests.RequestException as error:
@@ -145,15 +151,28 @@ def main() -> None:
     success_count = 0
 
     for chat_id in CHAT_IDS:
+        print("=" * 60)
+        print(f"Wysyłam konkurs do grupy: {chat_id}")
+
         photo_ok = send_photo(chat_id, photo_path)
+
+        if not photo_ok:
+            print(f"Grafika nie została wysłana do {chat_id}. Nie wysyłam samego tekstu.")
+            continue
+
         text_ok = send_text(chat_id, MESSAGE_TEXT)
 
         if photo_ok and text_ok:
             success_count += 1
+            print(f"Komplet wysłany poprawnie do {chat_id}")
+        else:
+            print(f"Nie wysłano kompletu do {chat_id}")
 
+    print("=" * 60)
     print(f"Wysłano grafikę i tekst do {success_count}/{len(CHAT_IDS)} grup.")
 
     if success_count != len(CHAT_IDS):
+        print("Nie wszystkie grupy dostały komplet. Sprawdź uprawnienia bota do wysyłania multimediów.")
         sys.exit(1)
 
 
