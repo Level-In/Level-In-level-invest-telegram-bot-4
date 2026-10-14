@@ -1,35 +1,11 @@
 name: Weekly Contest Message
 
 on:
-  schedule:
-    - cron: '35 11 * * 1'
-      timezone: Europe/Warsaw
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Sprawdź konfigurację bez wysyłania wiadomości'
-        required: false
-        type: boolean
-        default: true
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/weekly_contest.yml'
-      - 'weekly_contest.py'
-      - 'konkurs_tygodniowy.png'
-      - 'requirements.txt'
-
-permissions:
-  contents: read
-
-concurrency:
-  group: telegram-contest
-  cancel-in-progress: false
 
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -38,66 +14,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install -r requirements.txt
+      - run: pip install requests
 
-      - name: Sprawdź konfigurację i dostęp do grup bez wysyłania wiadomości
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: |
-          python - <<'PY'
-          import os
-          from pathlib import Path
-          import runpy
-          import sys
-
-          import requests
-
-          token = os.getenv("TELEGRAM_TOKEN")
-          if not token:
-              sys.exit("Brak sekretu TELEGRAM_TOKEN")
-          photo = Path("konkurs_tygodniowy.png")
-          if not photo.is_file() or photo.stat().st_size == 0:
-              sys.exit("Brak grafiki konkursowej lub pusty plik")
-          config = runpy.run_path("weekly_contest.py")
-
-          def telegram(method, **params):
-              try:
-                  response = requests.get(
-                      f"https://api.telegram.org/bot{token}/{method}",
-                      params=params,
-                      timeout=20,
-                  )
-              except requests.RequestException as error:
-                  sys.exit(f"Błąd połączenia Telegram: {type(error).__name__}")
-              try:
-                  payload = response.json()
-              except ValueError:
-                  sys.exit(f"Nieprawidłowa odpowiedź Telegram: HTTP {response.status_code}")
-              if not response.ok or not isinstance(payload, dict) or payload.get("ok") is not True:
-                  sys.exit(f"Telegram odrzucił {method}: HTTP {response.status_code}")
-              return payload["result"]
-
-          bot = telegram("getMe")
-          for chat_id in config["CHAT_IDS"]:
-              member = telegram("getChatMember", chat_id=chat_id, user_id=bot["id"])
-              if member["status"] in ("left", "kicked"):
-                  sys.exit(f"Bot nie należy do grupy {chat_id}")
-              if member["status"] == "restricted" and (
-                  not member.get("can_send_messages", False)
-                  or not member.get("can_send_photos", False)
-              ):
-                  sys.exit(f"Bot nie ma prawa wysyłki tekstu i zdjęć do {chat_id}")
-              chat = telegram("getChat", chat_id=chat_id)
-              if member["status"] == "member":
-                  permissions = chat.get("permissions", {})
-                  if permissions.get("can_send_messages") is False or permissions.get("can_send_photos") is False:
-                      sys.exit(f"Grupa {chat_id} blokuje wysyłkę tekstu lub zdjęć")
-              print(f"Dostęp do grupy {chat_id}: OK")
-          print("Konfiguracja poprawna. Test nie wysyła wiadomości.")
-          PY
-
-      - name: Wyślij konkurs do grup
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
-        run: python weekly_contest.py
+      - run: python weekly_contest.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
